@@ -1,0 +1,20 @@
+{
+  "name": "title-inbox-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-serve agent: a colleague authorizes read access to their Gmail/Google Workspace inbox, the agent scans it and learns how title insurance is done at the office, and emails the resulting knowledge base back to the office admin.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "googleapis": "^144.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
+    "resend": "^4.0.1"
+  }
+}
