@@ -54,7 +54,11 @@ async function fetchInboxMessages(tokens, { sinceDate, maxMessages, pageSize = 5
   const gmail = google.gmail({ version: 'v1', auth });
 
   const afterStr = toGmailDate(sinceDate); // YYYY/MM/DD
-  const query = `in:inbox after:${afterStr}`;
+  // No "in:inbox" here on purpose — Gmail's default search scope (no label
+  // filter) covers the whole mailbox except Spam/Trash, so archived/filed
+  // mail is included too. Restricting to in:inbox misses everything the
+  // person has already filed away, which for a working mailbox is most of it.
+  const query = `after:${afterStr}`;
 
   const ids = [];
   let pageToken;

@@ -1,18 +1,41 @@
 // Emails the finished knowledge base back to the office admin (Robert).
 const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Built lazily (not at module load) so a missing/placeholder key can never
+// crash the whole server at startup — it just means email delivery is
+// skipped, not that the process dies.
+function getResendClient() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || key === 'SET_ME') return null;
+  return new Resend(key);
+}
 
 async function deliverReport({ markdown, structured, meta, ok = true, error = null }) {
   const to = process.env.REPORT_TO_EMAIL;
   const from = process.env.REPORT_FROM_EMAIL;
 
-  if (!process.env.RESEND_API_KEY || !to || !from) {
+  // Safety net: print the full report to the logs FIRST, every time, no
+  // matter what happens with email. This is what guarantees the report is
+  // never silently lost, even if Resend is misconfigured or its API call
+  // fails for some reason.
+  console.log('[deliver] ==== REPORT START ====');
+  console.log(`[deliver] for: ${(meta && (meta.displayName || meta.mail)) || 'unknown'}`);
+  console.log(`[deliver] ok: ${ok}`);
+  if (ok) {
+    console.log(markdown);
+    console.log('[deliver] ---- structured JSON ----');
+    console.log(JSON.stringify(structured, null, 2));
+  } else {
+    console.log(`[deliver] error: ${error}`);
+  }
+  console.log('[deliver] ==== REPORT END ====');
+
+  const resend = getResendClient();
+  if (!resend || !to || !from) {
     console.error(
-      '[deliver] Missing RESEND_API_KEY / REPORT_TO_EMAIL / REPORT_FROM_EMAIL — report not sent. Dumping to stdout instead.'
+      '[deliver] RESEND_API_KEY not set (or still the "SET_ME" placeholder) / REPORT_TO_EMAIL / REPORT_FROM_EMAIL missing — email not sent. The full report is printed above in these logs.'
     );
-    console.log(markdown || error);
-    return { sent: false };
+    return { sent: false, reason: 'not_configured' };
   }
 
   const subject = ok
@@ -35,15 +58,32 @@ async function deliverReport({ markdown, structured, meta, ok = true, error = nu
     });
   }
 
-  const result = await resend.emails.send({
-    from,
-    to,
-    subject,
-    html,
-    attachments,
-  });
+  try {
+    const { data, error: sendError } = await resend.emails.send({
+      from,
+      to,
+      subject,
+      html,
+      attachments,
+    });
 
-  return { sent: true, result };
+    if (sendError) {
+      console.error(
+        '[deliver] Resend API returned an error — email NOT sent. The full report is printed above in these logs.',
+        sendError
+      );
+      return { sent: false, reason: 'resend_error', error: sendError };
+    }
+
+    console.log(`[deliver] email sent via Resend, id: ${data && data.id}`);
+    return { sent: true, result: data };
+  } catch (err) {
+    console.error(
+      '[deliver] Resend call threw — email NOT sent. The full report is printed above in these logs.',
+      err
+    );
+    return { sent: false, reason: 'resend_exception', error: err.message || String(err) };
+  }
 }
 
 function escapeHtml(str) {

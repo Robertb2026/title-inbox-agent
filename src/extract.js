@@ -2,7 +2,15 @@
 // knowledge base: one pass per batch, then one synthesis pass over all batches.
 const Anthropic = require('@anthropic-ai/sdk');
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Built lazily so a missing/invalid key can never crash the whole server at
+// startup (same pattern as src/deliver.js).
+let _anthropic = null;
+function getClient() {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _anthropic;
+}
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
 // Light defensive redaction before anything leaves this server: strip the
@@ -50,7 +58,7 @@ Do not include client names, property addresses, SSNs, account numbers, or dolla
 
 async function extractBatch(emails) {
   const content = formatBatch(emails);
-  const resp = await anthropic.messages.create({
+  const resp = await getClient().messages.create({
     model: MODEL,
     max_tokens: 4000,
     system: BATCH_SYSTEM_PROMPT,
@@ -72,7 +80,7 @@ End with a short "## Gaps / What This Doesn't Cover Yet" section listing anythin
 Return ONLY the markdown document, no preamble.`;
 
 async function synthesize(batchResults, meta) {
-  const resp = await anthropic.messages.create({
+  const resp = await getClient().messages.create({
     model: MODEL,
     max_tokens: 8000,
     system: SYNTHESIS_SYSTEM_PROMPT,
